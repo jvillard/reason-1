@@ -16,13 +16,11 @@ Install Stable
 ----------
 
 ```sh
-brew update
 brew install opam --HEAD
 opam init
 # Add this to your ~/.bashrc (or ~/.zshrc):
 #   eval `opam config env`
 
-opam update
 opam switch 4.02.3
 opam pin add -y merlin git@github.com:the-lambda-church/merlin.git#87ea0e7998c04f16e4821676c27f19d3879dc2d1
 opam pin add -y merlin_extend git@github.com:def-lkb/merlin-extend.git#ef634252a793542b05ec00a90f3c17de8fe0a357
