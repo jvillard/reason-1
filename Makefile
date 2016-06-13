@@ -4,9 +4,7 @@ default: build test
 
 build:
 	cp pkg/META.in pkg/META
-	ocaml pkg/build.ml native=true native-dynlink=true utop=true
-	chmod +x $(shell pwd)/_build/src/refmt_merlin_impl.sh
-	ln -fs $(shell pwd)/_build/src/refmt_merlin_impl.sh refmt_merlin_impl.sh
+	ocaml pkg/build.ml native=true native-dynlink=true
 
 install:
 	opam pin add reason . -y
@@ -16,12 +14,6 @@ run: build
 		$(shell ocamlfind query -predicates byte,toploop -r -a-format \
 		                        findlib compiler-libs.common unix) \
 		_build/src/reason.cma _build/src/reason_toploop.cmo
-
-run_utop: build
-	utop \
-		$(shell ocamlfind query -predicates byte,toploop -r -a-format \
-		                        compiler-libs.common) \
-		_build/src/reason.cma _build/src/reason_utop.cmo
 
 test: build
 	cd formatTest; ./test.sh
