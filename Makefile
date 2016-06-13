@@ -1,8 +1,10 @@
 # Portions Copyright (c) 2015-present, Facebook, Inc. All rights reserved.
 
+SHELL=bash -o pipefail
+
 default: build test
 
-build:
+build: compile_error
 	cp pkg/META.in pkg/META
 	ocaml pkg/build.ml native=true native-dynlink=true
 
@@ -21,7 +23,20 @@ test: build
 clean:
 	ocamlbuild -clean
 
-.PHONY: build clean
+# Compile error messages into ml file, checks if the error messages are complete and not redundent
+compile_error: update_error
+	menhir --explain --strict --unused-tokens src/reason_parser.mly --compile-errors src/reason_parser.messages > src/reason_parser_message.ml
+
+# Update error messages based on new grammar
+update_error:
+	@ cp -f src/reason_parser.messages src/reason_parser.messages.bak
+	@ if ! menhir --explain --strict --unused-tokens src/reason_parser.mly --update-errors src/reason_parser.messages.bak | sed -e 's/[[:space:]]*$$//g' > src/reason_parser.messages ; then \
+		cp src/reason_parser.messages.bak src/reason_parser.messages ; \
+		exit 1 ; \
+	fi
+	@ echo "The auto-generated comments in src/reason_parser.messages have been re-generated. The old messages file has been backed up at src/reason_parser.messages.bak"
+
+.PHONY: build clean update_error compile_error
 
 VERSION      := $$(opam query --version)
 NAME_VERSION := $$(opam query --name-version)

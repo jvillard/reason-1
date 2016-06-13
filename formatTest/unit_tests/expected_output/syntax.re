@@ -1,7 +1,8 @@
 /* Copyright (c) 2015-present, Facebook, Inc. All rights reserved. */
+
 [@@@autoFormat
   let wrap = 80;
-  let shift = 2;
+  let shift = 2
 ];
 
 Modules.run ();
@@ -269,8 +270,7 @@ let point2D = {x: 20, y: 30};
 let point3D: point3D = {
   x: 10,
   y: 11,
-  /* Optional Comma */
-  z: 80
+  z: 80 /* Optional Comma */
 };
 
 let printPoint (p: point) => {
@@ -339,17 +339,13 @@ let printPerson (p: person) => {
 
 /* let dontParseMeBro x y:int = x = y;*/
 /* With this unification, anywhere eyou see `= fun` you can just ommit it */
-/* Done */
-let blah a => a;
+let blah a => a; /* Done */
 
-/* Done (almost) */
-let blah a => a;
+let blah a => a; /* Done (almost) */
 
-/* Done */
-let blah a b => a;
+let blah a b => a; /* Done */
 
-/* Done (almost) */
-let blah a b => a;
+let blah a b => a; /* Done (almost) */
 
 /* More than one consecutive pattern must have a single case */
 type blah = {blahBlah: int};
@@ -378,21 +374,20 @@ let
   onlyDoingThisTopLevelLetToBypassTopLevelSequence = {
   let x = {
     print_int 1;
-    /* Missing trailing SEMI */
-    print_int 20
+    print_int 20 /* Missing trailing SEMI */
   };
   let x = {
     print_int 1;
-    /* Ensure missing middle SEMI reported well */
-    print_int 20;
+    print_int 20; /* Ensure missing middle SEMI reported well */
     print_int 20
   };
   let x = {
     print_int 1;
     print_int 20;
     10
-    /* Missing final SEMI */
+    /* Comment in final position */
   };
+  /* Missing final SEMI */
   x + x
 };
 
@@ -421,11 +416,11 @@ Printf.printf
 let blah arg =>
   switch arg {
   /* Comment before Bar */
-  /* Comment between bar/pattern */
-  | Red _ => 1
+  | /* Comment between bar/pattern */
+    Red _ => 1
   /* Comment Before non-first bar */
-  /* Comment betwen bar/pattern */
-  | Black _ => 0
+  | /* Comment betwen bar/pattern */
+    Black _ => 0
   | Green _ => 0
   };
 
@@ -444,17 +439,31 @@ let blah =
       let blah x | Red _ => 1 | Black _ => 0;
       Theres no sugar rule for dropping => fun, only = fun
    */
-/* See, nothing says we can drop the => fun */
+/* let blahCurriedX x => fun  /* See, nothing says we can drop the => fun */ */
+/*   |(Red x | Black x | Green x) => 1     /* With some effort, we can ammend the sugar rule that would */ */
+/*   | Black x => 0                       /* Allow us to drop any => fun.. Just need to make pattern matching */ */
+/*   | Green x => 0;                      /* Support that */ */
+/*  */
 let blahCurriedX x =>
   fun
-  /* With some effort, we can ammend the sugar rule that would */
   | Red x
   | Black x
   | Green x => 1
-  /* Allow us to drop any => fun.. Just need to make pattern matching */
-  | Black x => 0
-  /* Support that */
-  | Green x => 0;
+  /* With some effort, we can ammend the sugar rule that would */
+  | Black x => 0 /* Allow us to drop any => fun.. Just need to make pattern matching */
+  | Green x => 0 /* Support that */;
+
+let sameThingInLocal = {
+  let blahCurriedX x =>
+    fun
+    | Red x
+    | Black x
+    | Green x => 1
+    /* With some effort, we can ammend the sugar rule that would */
+    | Black x => 0 /* Allow us to drop any => fun.. Just need to make pattern matching */
+    | Green x => 0 /* Support that */;
+  blahCurriedX
+};
 
 /* This should be parsed/printed exactly as the previous */
 let blahCurriedX x =>
@@ -468,8 +477,7 @@ let blahCurriedX x =>
 /* Any time there are multiple match cases we require a leading BAR */
 let v = Red 10;
 
-/* So this NON-function still parses */
-let Black x | Red x | Green x = v;
+let Black x | Red x | Green x = v; /* So this NON-function still parses */
 
 /* This doesn't parse, however (and it doesn't in OCaml either):
      let | Black x | Red x | Green x = v;
@@ -970,6 +978,7 @@ let A | B | C = X;
 
 /*  A | B | C = X; */
 let A | B | C = X;
+
 
 /** External function declaration
  *

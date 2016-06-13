@@ -5,7 +5,7 @@ open Lexing
 exception Invalid_config of string
 
 
-let default_print_width = 90
+let default_print_width = 100
 
 (* Note: filename should only be used with .ml files. See reason_toolchain. *)
 let defaultImplementationParserFor use_stdin filename =
@@ -61,7 +61,7 @@ let () =
     "-print", Arg.String (fun x -> prnt := Some x), "<print>, print AST in <print> (either 'ml', 're', 'binary(default - for compiler input)', 'binary_reason(for interchange between Reason versions)', 'ast (print human readable directly)', 'none')";
     "-print-width", Arg.Int (fun x -> print_width := Some x), "<print-width>, wrapping width for printing the AST";
     "-heuristics-file", Arg.String (fun x -> heuristics_file := Some x),
-    "<path>, load path as a heuristics file to specify whtich constructors are defined with multi-arguments. Mostly used in removing [@implicit_arity] introduced from OCaml conversion.\n\t\texample.txt:\n\t\tConstructor1\n\t\tConstructor2";
+    "<path>, load path as a heuristics file to specify which constructors are defined with multi-arguments. Mostly used in removing [@implicit_arity] introduced from OCaml conversion.\n\t\texample.txt:\n\t\tConstructor1\n\t\tConstructor2";
   ]
   (fun arg -> filename := arg)
   "Reason: Meta Language Utility"
@@ -91,7 +91,7 @@ let () =
   Location.input_name := filename;
   let intf = match !intf with
     | None when (Filename.check_suffix filename ".rei" || Filename.check_suffix filename ".mli") -> true
-    | None -> 
+    | None ->
       if use_stdin then
         raise (Invalid_config ("Unable to determine if stdin input is an interface file. Invalid -is-interface-pp setting."))
       else
@@ -149,7 +149,6 @@ let () =
       in
       thePrinter (ast, comments)
     ) else (
-      (*    Printf.fprintf stderr "syntax error: %s\n" (Reason_error_report.report checkpoint); [] in *)
       let ((ast, comments), parsedAsML, parsedAsInterface) = match !prse with
         | None -> (defaultImplementationParserFor use_stdin filename)
         | Some "binary_reason" -> reasonBinaryParser use_stdin filename

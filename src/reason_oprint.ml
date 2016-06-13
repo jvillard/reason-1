@@ -285,7 +285,11 @@ and print_simple_out_type ppf =
          else if tags = None then "> " else "? ")
         print_fields row_fields
         print_present tags
-  | Otyp_alias _ | Otyp_poly _ | Otyp_arrow _ | Otyp_tuple _ as ty ->
+  | Otyp_tuple _ as ty ->
+      pp_open_box ppf 1;
+      print_out_type ppf ty;
+      pp_close_box ppf ()
+  | Otyp_alias _ | Otyp_poly _ | Otyp_arrow _ as ty ->
       pp_open_box ppf 1;
       pp_print_char ppf '(';
       print_out_type ppf ty;
@@ -340,7 +344,7 @@ and print_out_wrap_type ppf =
   function
   | (Otyp_constr (id, _::_)) as ty ->
       fprintf ppf "@[<0>(%a)@]" print_out_type ty
-  | ty -> print_out_type ppf ty
+  | ty -> print_simple_out_type ppf ty
 and print_typargs ppf =
   function
     [] -> ()
@@ -578,11 +582,11 @@ and print_out_constr ppf (name, tyl,ret_type_opt) =
   | Some ret_type ->
       begin match tyl with
       | [] ->
-          fprintf ppf "@[<2>%s of@ %a@]" name print_simple_out_type  ret_type
+          fprintf ppf "@[<2>%s :@ %a@]" name print_simple_out_type ret_type
       | _ ->
           fprintf ppf "@[<2>%s of@ %a :%a@]" name
-            (print_typlist print_simple_out_type "")
-            tyl print_simple_out_type ret_type
+            (print_typlist print_simple_out_type "") tyl
+            print_simple_out_type ret_type
       end
 
 

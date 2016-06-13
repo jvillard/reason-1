@@ -16,8 +16,20 @@
 touch $HOME/.utoprc
 touch $HOME/.utop-history
 DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
-if [[ $@ =~ "stdin" ]]; then
-   export stdin=1
+
+
+if [ ! -f $HOME/.reasoninit ]; then
+    # TODO: ideally we should generate this file by refmtting
+    # .ocamlinit. But refmt doesn't support toplevel formatting yet
+    echo "/* Added by rtop */
+let () =
+  try (Topdirs.dir_directory (Sys.getenv \"OCAML_TOPLEVEL_PATH\")) {
+  | Not_found => ()
+  };" > $HOME/.reasoninit
 fi
 
-utop -init $DIR/rtop_init.ml -I $HOME
+if [[ $@ =~ "stdin" ]]; then
+    refmt -parse re -print ml -use-stdin true -is-interface-pp false | utop $@
+else
+    utop -init $DIR/rtop_init.ml -I $HOME
+fi

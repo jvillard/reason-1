@@ -75,24 +75,26 @@
 open Location
 open Lexing
 
+module S = MenhirLib.General (* Streams *)
+
 let invalidLex = "invalidCharacter.orComment.orString"
 let syntax_error_str err loc =
   if !Reason_config.recoverable then
     [
-      Ast_helper.Str.mk ~loc:loc (Parsetree.Pstr_extension (Reason_utils.syntax_error_extension_node loc invalidLex, []))
+      Ast_helper.Str.mk ~loc:loc (Parsetree.Pstr_extension (Syntax_util.syntax_error_extension_node loc invalidLex, []))
     ]
   else
     raise err
 
 let syntax_error_core_type err loc =
   if !Reason_config.recoverable then
-    Ast_helper.Typ.mk ~loc:loc (Parsetree.Ptyp_extension (Reason_utils.syntax_error_extension_node loc invalidLex))
+    Ast_helper.Typ.mk ~loc:loc (Parsetree.Ptyp_extension (Syntax_util.syntax_error_extension_node loc invalidLex))
   else
     raise err
 
 let syntax_error_sig err loc =
   if !Reason_config.recoverable then
-    [Ast_helper.Sig.mk ~loc:loc (Parsetree.Psig_extension (Reason_utils.syntax_error_extension_node loc invalidLex, []))]
+    [Ast_helper.Sig.mk ~loc:loc (Parsetree.Psig_extension (Syntax_util.syntax_error_extension_node loc invalidLex, []))]
   else
     raise err
 
@@ -122,13 +124,14 @@ let setup_lexbuf use_stdin filename =
   Location.init lexbuf filename;
   lexbuf
 
-type comments = (String.t * Location.t) list
+(* (comment text, attachment_location, physical location) *)
+type attached_comments = (String.t * Location.t * Location.t) list
 
 module type Toolchain = sig
   (* Parsing *)
-  val canonical_core_type_with_comments: Lexing.lexbuf -> (Parsetree.core_type * comments)
-  val canonical_implementation_with_comments: Lexing.lexbuf -> (Parsetree.structure * comments)
-  val canonical_interface_with_comments: Lexing.lexbuf -> (Parsetree.signature * comments)
+  val canonical_core_type_with_comments: Lexing.lexbuf -> (Parsetree.core_type * attached_comments)
+  val canonical_implementation_with_comments: Lexing.lexbuf -> (Parsetree.structure * attached_comments)
+  val canonical_interface_with_comments: Lexing.lexbuf -> (Parsetree.signature * attached_comments)
 
   val canonical_core_type: Lexing.lexbuf -> Parsetree.core_type
   val canonical_implementation: Lexing.lexbuf -> Parsetree.structure
@@ -137,14 +140,14 @@ module type Toolchain = sig
   val canonical_use_file: Lexing.lexbuf -> Parsetree.toplevel_phrase list
 
   (* Printing *)
-  val print_canonical_interface_with_comments: (Parsetree.signature * comments) -> unit
-  val print_canonical_implementation_with_comments: (Parsetree.structure * comments) -> unit
+  val print_canonical_interface_with_comments: (Parsetree.signature * attached_comments) -> unit
+  val print_canonical_implementation_with_comments: (Parsetree.structure * attached_comments) -> unit
 
 end
 
 module type Toolchain_spec = sig
   val safeguard_parsing: Lexing.lexbuf ->
-    (unit -> ('a * comments)) -> ('a * comments)
+    (unit -> ('a * attached_comments)) -> ('a * attached_comments)
 
   module rec Lexer_impl: sig
     val init: unit -> unit
@@ -162,12 +165,14 @@ module type Toolchain_spec = sig
   val toplevel_phrase: Lexing.lexbuf -> Parsetree.toplevel_phrase
   val use_file: Lexing.lexbuf -> Parsetree.toplevel_phrase list
 
-  val format_interface_with_comments: (Parsetree.signature * comments) -> Format.formatter -> unit
-  val format_implementation_with_comments: (Parsetree.structure * comments) -> Format.formatter -> unit
+  val format_interface_with_comments: (Parsetree.signature * attached_comments) -> Format.formatter -> unit
+  val format_implementation_with_comments: (Parsetree.structure * attached_comments) -> Format.formatter -> unit
 end
 
 let line_content = Str.regexp "[^ \t]+"
-let space_before_newline = Str.regexp "[ \t]*$"
+(* We allow semicolons to be considered white space for sake of determining if
+   an item is the last thing on the line. *)
+let space_before_newline = Str.regexp "[,; \t]*$"
 let new_line = Str.regexp "^"
 
 module Create_parse_entrypoint (Toolchain_impl: Toolchain_spec) :Toolchain = struct
@@ -179,34 +184,39 @@ module Create_parse_entrypoint (Toolchain_impl: Toolchain_spec) :Toolchain = str
       match !chan_input with
         | "" ->
           let _  = Parsing.clear_parser() in
-          (ast, unmodified_comments)
+          (ast, unmodified_comments |> List.map (fun (txt, phys_loc) -> (txt, phys_loc, phys_loc)))
         | _ ->
-          let modified_comments =
-            List.map (fun (str, loc) ->
+          let modified_and_attached_comments =
+            List.map (fun (str, physical_loc) ->
               (* When searching for "^" regexp, returns location of newline + 1 *)
-              let first_char_of_line = Str.search_backward new_line !chan_input loc.loc_start.pos_cnum in
-              let comment_length = (loc.loc_end.pos_cnum - loc.loc_start.pos_cnum - 4) in
-              let original_comment_contents = String.sub !chan_input (loc.loc_start.pos_cnum + 2) comment_length in
+              let first_char_of_line = Str.search_backward new_line !chan_input physical_loc.loc_start.pos_cnum in
+              let end_pos_plus_one = physical_loc.loc_end.pos_cnum in
+              let comment_length = (end_pos_plus_one - physical_loc.loc_start.pos_cnum - 4) in
+              (* Also, the string contents originally reported are incorrect! *)
+              let original_comment_contents = String.sub !chan_input (physical_loc.loc_start.pos_cnum + 2) comment_length in
               let (com, attachment_location) =
                 match Str.search_forward line_content !chan_input first_char_of_line
                 with
                   | n ->
-                    (* Recall that comment end position is messed up. *)
-                    let one_greater_than_comment_end = loc.loc_end.pos_cnum in
+                    (* Recall that all end positions are actually the position of end + 1. *)
+                    let one_greater_than_comment_end = end_pos_plus_one in
                     (* Str.string_match lets you specify a position one greater than last position *)
-                    let comment_is_last_thing_on_line = Str.string_match space_before_newline !chan_input one_greater_than_comment_end in
-                    if n < loc.loc_start.pos_cnum && comment_is_last_thing_on_line then
-                      (original_comment_contents, {loc with loc_start = {loc.loc_start with pos_cnum = n}})
+                    let comment_is_last_thing_on_line =
+                      Str.string_match space_before_newline !chan_input one_greater_than_comment_end in
+                    if n < physical_loc.loc_start.pos_cnum && comment_is_last_thing_on_line then (
+                      original_comment_contents,
+                      {physical_loc with loc_start = {physical_loc.loc_start with pos_cnum = n}}
+                    )
                     else
-                      (original_comment_contents, loc)
-                  | exception Not_found -> (original_comment_contents, loc)
+                      (original_comment_contents, physical_loc)
+                  | exception Not_found -> (original_comment_contents, physical_loc)
               in
-              (com, attachment_location)
+              (com, attachment_location, physical_loc)
             )
             unmodified_comments
           in
           let _  = Parsing.clear_parser() in
-          (ast, modified_comments)
+          (ast, modified_and_attached_comments)
     )
 
   (*
@@ -271,7 +281,7 @@ module OCaml_syntax = struct
 
   (* Skip tokens to the end of the phrase *)
   (* TODO: consolidate these copy-paste skip/trys into something that works for
-   * every syntax (also see [reason_util]). *)
+   * every syntax (also see [syntax_util]). *)
   let rec skip_phrase lexbuf =
     try
       match Lexer_impl.token lexbuf with
@@ -365,6 +375,33 @@ module JS_syntax = struct
     supplier.last_token <- Some t;
     t
 
+  (* read last token's location from a supplier *)
+  let last_token_loc supplier =
+    match supplier.last_token with
+    | Some (_, s, e) ->
+       {
+         loc_start = s;
+         loc_end = e;
+         loc_ghost = false;
+       }
+    | None -> assert false
+
+  (* get the stack of a checkpoint *)
+  let stack checkpoint =
+    match checkpoint with
+    | I.HandlingError env ->
+       I.stack env
+    | _ ->
+       assert false
+
+  (* get state number of a checkpoint *)
+  let state checkpoint : int =
+    match Lazy.force (stack checkpoint) with
+    | S.Nil ->
+       0
+    | S.Cons (I.Element (s, _, _, _), _) ->
+             I.number s
+
   (* [loop_handle_yacc] mimic yacc's error handling mechanism in menhir.
      When it hits an error state, it pops up the stack until it finds a
      state when the error can be shifted or reduced.
@@ -420,20 +457,31 @@ module JS_syntax = struct
        let checkpoint = I.resume checkpoint in
        loop_handle_yacc supplier in_error checkpoint
     | I.HandlingError env ->
-       let checkpoint = I.resume checkpoint in
-       (* Enter error state *)
-       loop_handle_yacc supplier true checkpoint
+       if !Reason_config.recoverable then
+         let checkpoint = I.resume checkpoint in
+         (* Enter error recovery state *)
+         loop_handle_yacc supplier true checkpoint
+       else
+         (* If not in a recoverable state, fail early by raising a
+          * customized Error object
+          *)
+         let loc = last_token_loc supplier in
+         let state = state checkpoint in
+         (* Check the error database to see what's the error message
+          * associated with the current parser state
+          *)
+         let msg =
+           try
+             Reason_parser_message.message state
+           with
+             | Not_found -> "<UNKNOWN SYNTAX ERROR>"
+         in
+         let msg_with_state = Printf.sprintf "%d: %s" state msg in
+         raise (Syntax_util.Error (loc, (Syntax_util.Syntax_error msg_with_state)))
     | I.Rejected ->
        begin
-         match supplier.last_token with
-         | Some (_, s, e) ->
-            let loc = {
-                loc_start = s;
-                loc_end = e;
-                loc_ghost = false;
-              } in
-            raise Syntaxerr.(Error(Syntaxerr.Other loc))
-         | None -> assert false
+         let loc = last_token_loc supplier in
+         raise Syntaxerr.(Error(Syntaxerr.Other loc))
        end
     | I.Accepted v ->
        (* The parser has succeeded and produced a semantic value. *)
@@ -493,6 +541,14 @@ module JS_syntax = struct
         if !Location.input_name = "//toplevel//"
         then maybe_skip_phrase lexbuf;
         raise(Syntaxerr.Error(Syntaxerr.Other loc))
+    | Error _ as x ->
+       let loc = Location.curr lexbuf in
+       if !Location.input_name = "//toplevel//"
+       then
+         let _ = maybe_skip_phrase lexbuf in
+         raise(Syntaxerr.Error(Syntaxerr.Other loc))
+       else
+         raise x
     | x -> raise x
 
   let format_interface_with_comments (signature, comments) formatter =

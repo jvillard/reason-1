@@ -14,3 +14,6 @@ src_test/_tags
 .DS_Store
 formatTest/customMLFiles/*.ml
 formatTest/customMLFormatOutput.re
+.jenga
+src/reason_parser.messages.bak
+*~
